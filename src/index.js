@@ -3,6 +3,9 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import usersRoutes from "./routes/usersRoutes.js";
+import convosRoutes from "./routes/convosRoutes.js";
+import prisma from "./prisma.js";
 
 const app = express();
 const server = createServer(app);
@@ -10,31 +13,66 @@ const io = new Server(server);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+app.use(express.json());
 app.use(express.static(join(__dirname, "../public")));
 
 app.get("/", (req, res) => {
   res.sendFile("index.html");
 });
 
+const onlineUsers = new Map();
+
 io.on("connection", (socket) => {
-  socket.on("join room", (name, room) => {
-    socket.join(room);
-    socket.broadcast.to(room).emit("room message", `${name} joined ${room}`);
+  socket.on("login", async (userId) => {
+    const convos = await prisma.convo.findMany({
+      where: { users: { some: { id: parseInt(userId) } } },
+    });
+
+    onlineUsers.set(userId.toString(), socket.id);
+    socket.join(convos.map((convo) => convo.id.toString()));
   });
 
-  socket.on("leave room", (name, room) => {
-    socket.leave(room);
-    socket.broadcast.to(room).emit("room message", `${name} left ${room}`);
+  socket.on("new conversation", async (names, callback) => {
+    const newConvo = await prisma.convo.create({
+      data: {
+        users: {
+          connect: names.map((name) => ({ name })),
+        },
+      },
+      include: { users: true },
+    });
+
+    newConvo.users.forEach((user) => {
+      const targetSocketId = onlineUsers.get(user.id.toString());
+      if (targetSocketId) {
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.join(newConvo.id.toString());
+          targetSocket.emit("new conversation", newConvo.id);
+        }
+      }
+    });
+
+    callback({ convoId: newConvo.id });
   });
 
-  socket.on("room message", (name, room, msg) => {
-    socket.broadcast.to(room).emit("room message", `${name}: ${msg}`);
-  });
-
-  socket.on("common room", (name, msg) => {
-    socket.broadcast.emit("common room", `${name}: ${msg}`);
+  socket.on("message", async (convoId, userId, username, msg) => {
+    await prisma.message.create({
+      data: {
+        msg,
+        userId: parseInt(userId),
+        convoId: parseInt(convoId),
+      },
+    });
+    socket.broadcast
+      .to(convoId.toString())
+      .emit("message", convoId, userId, username, msg);
   });
 });
+
+// api routes
+app.use("/api/users", usersRoutes);
+app.use("/api/convos", convosRoutes);
 
 server.listen(3000, () => {
   console.log("server started on port 3000");

@@ -15,18 +15,73 @@ const toggleRoomBtn = document.getElementById("toggle-room-btn");
 const closeJoinModal = document.getElementById("close-join-modal");
 const roomNameHeader = document.getElementById("room-name");
 
-let currentUser = "";
-let currentRoom = "";
+let currentUser = null;
+let currentConvo = null;
 
-nameForm.addEventListener("submit", (e) => {
+socket.on("message", (convoId, userId, username, msg) => {
+  if (convoId == currentConvo) {
+    const message = document.createElement("li");
+    message.textContent = `${username}: ${msg}`;
+    messages.append(message);
+  } else {
+    window.alert(`New message from ${username}`);
+  }
+});
+
+socket.on("new conversation", async () => {
+  // refetch fresh convo list from REST API
+  const response = await fetch(
+    `http://localhost:3000/api/convos/users/${currentUser.id}`,
+  );
+  const convos = await response.json();
+
+  if (!currentConvo) {
+    messages.innerHTML = "";
+    convos.forEach((convo) => {
+      const dialogue = document.createElement("li");
+      dialogue.textContent = `User: ${convo.users.find((user) => user.name != currentUser.name).name}`;
+
+      dialogue.addEventListener("click", async () => {
+        await joinRoomFn(
+          convo.id,
+          convo.users.find((user) => user.name != currentUser.name).name,
+        );
+      });
+
+      messages.append(dialogue);
+    });
+  }
+});
+
+nameForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  currentUser = usernameInput.value.trim();
-  if (currentUser) {
+  const username = usernameInput.value.trim();
+
+  if (username) {
+    const response = await fetch(`http://localhost:3000/api/users/${username}`);
+    currentUser = await response.json();
+
+    socket.emit("login", currentUser.id);
+
     // Hide modal
     nameModal.classList.add("opacity-0", "pointer-events-none");
     setTimeout(() => {
       nameModal.style.display = "none";
     }, 300);
+
+    currentUser.convos.forEach((convo) => {
+      const dialogue = document.createElement("li");
+      dialogue.textContent = `User: ${convo.users.find((user) => user.name != currentUser.name).name}`;
+
+      dialogue.addEventListener("click", async () => {
+        await joinRoomFn(
+          convo.id,
+          convo.users.find((user) => user.name != currentUser.name).name,
+        );
+      });
+
+      messages.append(dialogue);
+    });
   }
 });
 
@@ -38,49 +93,52 @@ window.addEventListener("DOMContentLoaded", () => {
 // Send messages
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  if (currentRoom) {
+  if (currentConvo) {
     const message = document.createElement("li");
     message.textContent = `You: ${input.value}`;
     messages.append(message);
 
-    socket.emit("room message", currentUser, currentRoom, input.value);
-  } else {
-    const message = document.createElement("li");
-    message.textContent = `You: ${input.value}`;
-    messages.append(message);
-
-    socket.emit("common room", currentUser, input.value);
+    socket.emit(
+      "message",
+      currentConvo,
+      currentUser.id,
+      currentUser.name,
+      input.value,
+    );
   }
 
   input.value = "";
 });
 
-socket.on("room message", (msg) => {
-  const message = document.createElement("li");
-  message.textContent = msg;
-  messages.append(message);
-});
-
-socket.on("common room", (msg) => {
-  const message = document.createElement("li");
-  message.textContent = msg;
-  messages.append(message);
-});
-
 // Toggle Room Button (Join/Leave)
-toggleRoomBtn.addEventListener("click", () => {
-  if (currentRoom) {
+toggleRoomBtn.addEventListener("click", async () => {
+  if (currentConvo) {
     // Leave Room Logic
-    socket.emit("leave room", currentUser, currentRoom);
-
     messages.innerHTML = "";
-    const message = document.createElement("li");
-    message.textContent = `You left ${currentRoom}`;
-    messages.append(message);
 
-    currentRoom = "";
-    roomNameHeader.textContent = "Common Channel";
-    toggleRoomBtn.textContent = "Join Room";
+    // refetch fresh convo list from REST API
+    const response = await fetch(
+      `http://localhost:3000/api/convos/users/${currentUser.id}`,
+    );
+    const convos = await response.json();
+
+    convos.forEach((convo) => {
+      const dialogue = document.createElement("li");
+      dialogue.textContent = `User: ${convo.users.find((user) => user.name != currentUser.name).name}`;
+
+      dialogue.addEventListener("click", async () => {
+        await joinRoomFn(
+          convo.id,
+          convo.users.find((user) => user.name != currentUser.name).name,
+        );
+      });
+
+      messages.append(dialogue);
+    });
+
+    currentConvo = "";
+    roomNameHeader.textContent = "All Conversations";
+    toggleRoomBtn.textContent = "New Conversation";
     toggleRoomBtn.classList.remove("btn-leave");
     toggleRoomBtn.classList.add("btn-join");
   } else {
@@ -102,29 +160,49 @@ closeJoinModal.addEventListener("click", () => {
 });
 
 // Join Room Logic
-joinRoomForm.addEventListener("submit", (e) => {
+joinRoomForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const newRoom = roomInput.value.trim();
-  if (newRoom) {
-    currentRoom = newRoom;
-    roomNameHeader.textContent = `Room: ${newRoom}`;
-
-    socket.emit("join room", currentUser, currentRoom);
-
-    // Change button to Leave Room
-    toggleRoomBtn.textContent = "Leave Room";
-    toggleRoomBtn.classList.remove("btn-join");
-    toggleRoomBtn.classList.add("btn-leave");
-
-    joinRoomModal.classList.add("hidden");
-    setTimeout(() => {
-      joinRoomModal.style.display = "none";
-      roomInput.value = "";
-    }, 300);
-
-    messages.innerHTML = "";
-    const message = document.createElement("li");
-    message.textContent = `You joined ${currentRoom}`;
-    messages.append(message);
+  const targetUser = roomInput.value.trim();
+  if (targetUser) {
+    socket.emit(
+      "new conversation",
+      [currentUser.name, targetUser],
+      async ({ convoId }) => {
+        currentConvo = convoId;
+        await joinRoomFn(convoId, targetUser);
+      },
+    );
   }
 });
+
+const joinRoomFn = async (convoId, targetUser) => {
+  roomNameHeader.textContent = `User:  ${targetUser}`;
+
+  // Change button to Leave Room
+  toggleRoomBtn.textContent = "Leave Conversation";
+  toggleRoomBtn.classList.remove("btn-join");
+  toggleRoomBtn.classList.add("btn-leave");
+  messages.innerHTML = "";
+
+  joinRoomModal.classList.add("hidden");
+  setTimeout(() => {
+    joinRoomModal.style.display = "none";
+    roomInput.value = "";
+  }, 300);
+
+  const response = await fetch(`http://localhost:3000/api/convos/${convoId}`);
+  const correspondingConvo = await response.json();
+
+  currentConvo = correspondingConvo.id;
+
+  correspondingConvo.msgs.forEach((msg) => {
+    const message = document.createElement("li");
+    if (msg.userId == currentUser.id) {
+      message.textContent = `You: ${msg.msg}`;
+    } else {
+      message.textContent = `${targetUser}: ${msg.msg}`;
+    }
+
+    messages.append(message);
+  });
+};

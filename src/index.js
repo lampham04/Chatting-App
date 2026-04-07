@@ -3,9 +3,12 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import usersRoutes from "./routes/usersRoutes.js";
-import convosRoutes from "./routes/convosRoutes.js";
+import usersRouter from "./routes/usersRoutes.js";
+import convosRouter from "./routes/convosRoutes.js";
+import authRouter from "./routes/authRoutes.js";
+import authMiddleware from "./middlewares/authMiddleware.js";
 import prisma from "./prisma.js";
+import jwt from "jsonwebtoken";
 
 const app = express();
 const server = createServer(app);
@@ -22,19 +25,33 @@ app.get("/", (req, res) => {
 
 const onlineUsers = new Map();
 
-io.on("connection", (socket) => {
-  socket.on("login", async (userId) => {
-    const convos = await prisma.convo.findMany({
-      where: { users: { some: { id: parseInt(userId) } } },
-    });
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
 
-    if (!onlineUsers.has(userId.toString())) {
-      onlineUsers.set(userId.toString(), new Set());
-    }
-    onlineUsers.get(userId.toString()).add(socket.id);
+  if (!token) {
+    return next(new Error("no token"));
+  }
 
-    socket.join(convos.map((convo) => convo.id.toString()));
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.id; // attach to socket for later use
+    next(); // allow connection
+  } catch (err) {
+    next(new Error("invalid token")); // reject connection
+  }
+});
+
+io.on("connection", async (socket) => {
+  const convos = await prisma.convo.findMany({
+    where: { users: { some: { id: socket.userId } } },
   });
+
+  if (!onlineUsers.has(socket.userId.toString())) {
+    onlineUsers.set(socket.userId.toString(), new Set());
+  }
+  onlineUsers.get(socket.userId.toString()).add(socket.id);
+
+  socket.join(convos.map((convo) => convo.id.toString()));
 
   socket.on("new conversation", async (names, callback) => {
     const newConvo = await prisma.convo.create({
@@ -77,8 +94,9 @@ io.on("connection", (socket) => {
 });
 
 // api routes
-app.use("/api/users", usersRoutes);
-app.use("/api/convos", convosRoutes);
+app.use("/api/auth", authRouter);
+app.use("/api/users", authMiddleware, usersRouter);
+app.use("/api/convos", authMiddleware, convosRouter);
 
 server.listen(3000, () => {
   console.log("server started on port 3000");

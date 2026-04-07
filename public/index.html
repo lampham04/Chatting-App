@@ -22,21 +22,30 @@
       <div class="modal-container">
         <div class="modal-header">
           <h2>Welcome to the Chat</h2>
-          <p>Please enter your name to join the conversation.</p>
+          <p>Login to join the conversation.</p>
         </div>
         <form class="modal-form" id="name-form">
           <div>
-            <label class="sr-only" for="username">Your Name</label>
+            <label class="sr-only" for="username">Username</label>
             <input
               autocomplete="off"
               class="modal-input"
               id="username"
-              placeholder="Enter your name..."
+              placeholder="Enter your username..."
               required=""
               type="text"
             />
+            <label class="sr-only" for="password">Password</label>
+            <input
+              autocomplete="off"
+              class="modal-input"
+              id="password"
+              placeholder="Enter your password..."
+              required=""
+              type="password"
+            />
           </div>
-          <button class="btn-primary" type="submit">Join Chat</button>
+          <button class="btn-primary" type="submit">Join</button>
         </form>
       </div>
     </div>
@@ -48,12 +57,12 @@
     >
       <div class="modal-container">
         <div class="modal-header">
-          <h2>Join a Room</h2>
-          <p>Enter the name of the room you wish to join.</p>
+          <h2>Messaging</h2>
+          <p>Enter the name of the user you wish to message.</p>
         </div>
         <form class="modal-form" id="join-room-form">
           <div>
-            <label class="sr-only" for="room-input">Room Name</label>
+            <label class="sr-only" for="room-input">User</label>
             <input
               autocomplete="off"
               class="modal-input"
@@ -64,7 +73,7 @@
             />
           </div>
           <div style="display: flex; gap: 0.5rem">
-            <button class="btn-primary" type="submit">Join</button>
+            <button class="btn-primary" type="submit">Message</button>
             <button
               class="btn-primary"
               id="close-join-modal"

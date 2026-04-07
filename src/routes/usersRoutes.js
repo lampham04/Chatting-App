@@ -3,19 +3,6 @@ import prisma from "../prisma.js";
 
 const router = Router();
 
-// create new user
-router.post("/", async (req, res) => {
-  const { name } = req.body;
-
-  const user = await prisma.user.create({
-    data: {
-      name,
-    },
-  });
-
-  res.status(201).json(user);
-});
-
 router.get("/:name", async (req, res) => {
   const { name } = req.params;
 

@@ -28,7 +28,11 @@ io.on("connection", (socket) => {
       where: { users: { some: { id: parseInt(userId) } } },
     });
 
-    onlineUsers.set(userId.toString(), socket.id);
+    if (!onlineUsers.has(userId.toString())) {
+      onlineUsers.set(userId.toString(), new Set());
+    }
+    onlineUsers.get(userId.toString()).add(socket.id);
+
     socket.join(convos.map((convo) => convo.id.toString()));
   });
 
@@ -43,13 +47,15 @@ io.on("connection", (socket) => {
     });
 
     newConvo.users.forEach((user) => {
-      const targetSocketId = onlineUsers.get(user.id.toString());
-      if (targetSocketId) {
-        const targetSocket = io.sockets.sockets.get(targetSocketId);
-        if (targetSocket) {
-          targetSocket.join(newConvo.id.toString());
-          targetSocket.emit("new conversation", newConvo.id);
-        }
+      const targetSocketIds = onlineUsers.get(user.id.toString());
+      if (targetSocketIds) {
+        targetSocketIds.forEach((targetSocketId) => {
+          const targetSocket = io.sockets.sockets.get(targetSocketId);
+          if (targetSocket) {
+            targetSocket.join(newConvo.id.toString());
+            targetSocket.emit("new conversation", newConvo.id);
+          }
+        });
       }
     });
 

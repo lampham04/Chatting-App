@@ -23,8 +23,6 @@ app.get("/", (req, res) => {
   res.sendFile("index.html");
 });
 
-const onlineUsers = new Map();
-
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
 
@@ -46,12 +44,7 @@ io.on("connection", async (socket) => {
     where: { users: { some: { id: socket.userId } } },
   });
 
-  if (!onlineUsers.has(socket.userId.toString())) {
-    onlineUsers.set(socket.userId.toString(), new Set());
-  }
-  onlineUsers.get(socket.userId.toString()).add(socket.id);
-
-  socket.join(convos.map((convo) => convo.id.toString()));
+  socket.join(socket.userId.toString());
 
   socket.on("new conversation", async (names, callback) => {
     const newConvo = await prisma.convo.create({
@@ -64,22 +57,13 @@ io.on("connection", async (socket) => {
     });
 
     newConvo.users.forEach((user) => {
-      const targetSocketIds = onlineUsers.get(user.id.toString());
-      if (targetSocketIds) {
-        targetSocketIds.forEach((targetSocketId) => {
-          const targetSocket = io.sockets.sockets.get(targetSocketId);
-          if (targetSocket) {
-            targetSocket.join(newConvo.id.toString());
-            targetSocket.emit("new conversation", newConvo.id);
-          }
-        });
-      }
+      socket.to(user.id.toString()).emit("new conversation");
     });
 
     callback({ convoId: newConvo.id });
   });
 
-  socket.on("message", async (convoId, userId, username, msg) => {
+  socket.on("message", async (convoId, userId, username, targetId, msg) => {
     await prisma.message.create({
       data: {
         msg,
@@ -87,8 +71,9 @@ io.on("connection", async (socket) => {
         convoId: parseInt(convoId),
       },
     });
+
     socket.broadcast
-      .to(convoId.toString())
+      .to(targetId.toString())
       .emit("message", convoId, userId, username, msg);
   });
 });

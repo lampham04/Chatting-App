@@ -164,15 +164,6 @@ body {
   padding: 0;
 }
 
-#messages > li {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-#messages > li:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.02);
-}
-
 /* Bottom Input Form Styles */
 #form {
   background: rgba(255, 255, 255, 0.05);
@@ -231,4 +222,29 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+.mine {
+  align-self: flex-end;
+  background: #0084ff;
+  color: white;
+}
+
+.theirs {
+  align-self: flex-start;
+  background: #e4e6eb;
+  color: black;
+}
+
+#messages {
+  display: flex;
+  flex-direction: column;
+}
+
+#messages li {
+  max-width: 60%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  list-style: none;
+  margin: 4px 0;
 }

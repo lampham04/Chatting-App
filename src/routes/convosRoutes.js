@@ -40,7 +40,7 @@ router.get("/:id", async (req, res) => {
 
   const convo = await prisma.convo.findFirst({
     where: { id: parseInt(id) },
-    include: { msgs: true },
+    include: { msgs: true, users: true },
   });
 
   res.status(200).json(convo);

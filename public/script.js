@@ -35,13 +35,15 @@ function initSocket(token) {
   });
 
   socket.on("message", (convoId, userId, username, msg) => {
-    if (convoId == currentConvo) {
-      const message = document.createElement("li");
-      message.textContent = `${username}: ${msg}`;
-      messages.append(message);
-    } else {
+    if (!currentConvo || convoId != currentConvo.id) {
       window.alert(`New message from ${username}`);
+      return;
     }
+
+    const message = document.createElement("li");
+    message.textContent = `${msg}`;
+    message.classList.add("theirs");
+    messages.append(message);
   });
 
   socket.on("new conversation", async () => {
@@ -97,14 +99,18 @@ const joinRoomFn = async (convoId, targetUser) => {
   });
   const correspondingConvo = await response.json();
 
-  currentConvo = correspondingConvo.id;
+  currentConvo = correspondingConvo;
 
   correspondingConvo.msgs.forEach((msg) => {
     const message = document.createElement("li");
-    message.textContent =
-      msg.userId == currentUser.id
-        ? `You: ${msg.msg}`
-        : `${targetUser}: ${msg.msg}`;
+    message.textContent = `${msg.msg}`;
+
+    if (msg.userId == currentUser.id) {
+      message.classList.add("mine");
+    } else {
+      message.classList.add("theirs");
+    }
+
     messages.append(message);
   });
 };
@@ -156,14 +162,22 @@ form.addEventListener("submit", (e) => {
   e.preventDefault();
   if (currentConvo && input.value.trim()) {
     const message = document.createElement("li");
-    message.textContent = `You: ${input.value}`;
+    message.textContent = `${input.value}`;
+    message.classList.add("mine");
     messages.append(message);
+
+    console.log(currentConvo);
+
+    const targetUser = currentConvo.users.find(
+      (user) => user.id !== currentUser.id,
+    );
 
     socket.emit(
       "message",
-      currentConvo,
+      currentConvo.id,
       currentUser.id,
       currentUser.name,
+      targetUser.id,
       input.value,
     );
   }
@@ -183,7 +197,7 @@ toggleRoomBtn.addEventListener("click", async () => {
 
     renderConvoList(convos);
 
-    currentConvo = "";
+    currentConvo = null;
     roomNameHeader.textContent = "All Conversations";
     toggleRoomBtn.textContent = "New Conversation";
     toggleRoomBtn.classList.remove("btn-leave");
